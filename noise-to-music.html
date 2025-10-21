@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Noise to Music Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            width: 95vw;
+            height: 95vh;
+            background: rgba(0, 0, 0, 0.85);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+        }
+
+        .header {
+            padding: 20px 30px;
+            background: linear-gradient(90deg, #ff6b6b, #4ecdc4);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            color: white;
+            font-size: 28px;
+            font-weight: 700;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 50px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn-start {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+
+        .btn-stop {
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            color: #333;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Vertical Timeline/Progress Bar in Center */
+        .timeline-container {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 120px;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            z-index: 10;
+        }
+
+        .timeline {
+            width: 6px;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .timeline-progress {
+            width: 100%;
+            height: 0%;
+            background: linear-gradient(180deg, #00f2fe 0%, #4facfe 50%, #00f2fe 100%);
+            box-shadow: 0 0 20px rgba(79, 172, 254, 0.8);
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                box-shadow: 0 0 20px rgba(79, 172, 254, 0.8);
+            }
+            50% {
+                box-shadow: 0 0 40px rgba(79, 172, 254, 1);
+            }
+        }
+
+        .playhead {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            box-shadow: 0 0 30px rgba(245, 87, 108, 0.8);
+            animation: playheadPulse 1.5s ease-in-out infinite;
+            transition: top 0.1s linear;
+        }
+
+        @keyframes playheadPulse {
+            0%, 100% {
+                transform: translateX(-50%) scale(1);
+            }
+            50% {
+                transform: translateX(-50%) scale(1.2);
+            }
+        }
+
+        .timeline-markers {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .marker {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            left: -3px;
+            animation: markerGlow 2s ease-in-out infinite;
+        }
+
+        @keyframes markerGlow {
+            0%, 100% {
+                background: rgba(255, 255, 255, 0.3);
+            }
+            50% {
+                background: rgba(255, 255, 255, 0.6);
+            }
+        }
+
+        /* Left Side - Input Visualization */
+        .left-panel {
+            flex: 1;
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Right Side - Output Visualization */
+        .right-panel {
+            flex: 1;
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .panel-title {
+            color: #4ecdc4;
+            font-size: 18px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-align: center;
+            text-shadow: 0 0 10px rgba(78, 205, 196, 0.5);
+        }
+
+        .visualization-box {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .visualization-box::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: conic-gradient(from 0deg, transparent, rgba(78, 205, 196, 0.1), transparent);
+            animation: rotate 4s linear infinite;
+        }
+
+        @keyframes rotate {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            z-index: 1;
+        }
+
+        .label {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            z-index: 2;
+        }
+
+        .note-display {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 48px;
+            font-weight: 700;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.8);
+            z-index: 2;
+            animation: noteAppear 0.3s ease-out;
+        }
+
+        @keyframes noteAppear {
+            from {
+                transform: translate(-50%, -50%) scale(0);
+                opacity: 0;
+            }
+            to {
+                transform: translate(-50%, -50%) scale(1);
+                opacity: 1;
+            }
+        }
+
+        .instrument-indicator {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            padding: 8px 16px;
+            background: rgba(245, 87, 108, 0.3);
+            border-radius: 20px;
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            z-index: 2;
+            backdrop-filter: blur(10px);
+        }
+
+        .status-bar {
+            padding: 15px 30px;
+            background: rgba(0, 0, 0, 0.5);
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 13px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ff6b6b;
+            animation: blink 1s ease-in-out infinite;
+        }
+
+        .status-dot.active {
+            background: #4ecdc4;
+        }
+
+        @keyframes blink {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.3;
+            }
+        }
+
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: white;
+            border-radius: 50%;
+            pointer-events: none;
+            animation: particleFloat 3s ease-in-out infinite;
+        }
+
+        @keyframes particleFloat {
+            0%, 100% {
+                transform: translateY(0) scale(1);
+                opacity: 0;
+            }
+            10% {
+                opacity: 1;
+            }
+            90% {
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(-100vh) scale(0);
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎵 Noise to Music Generator</h1>
+            <div class="controls">
+                <button class="btn btn-start" id="startBtn">Start</button>
+                <button class="btn btn-stop" id="stopBtn" disabled>Stop</button>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <!-- Left Panel - Input Visualization -->
+            <div class="left-panel">
+                <div class="panel-title">Input Audio</div>
+                
+                <div class="visualization-box">
+                    <div class="label">Waveform</div>
+                    <canvas id="inputWaveform"></canvas>
+                </div>
+
+                <div class="visualization-box">
+                    <div class="label">Spectrum</div>
+                    <canvas id="inputSpectrum"></canvas>
+                </div>
+            </div>
+
+            <!-- Center Timeline -->
+            <div class="timeline-container">
+                <div class="timeline">
+                    <div class="timeline-progress" id="timelineProgress"></div>
+                    <div class="timeline-markers" id="timelineMarkers"></div>
+                </div>
+                <div class="playhead" id="playhead"></div>
+            </div>
+
+            <!-- Right Panel - Output Visualization -->
+            <div class="right-panel">
+                <div class="panel-title">Generated Music</div>
+                
+                <div class="visualization-box">
+                    <div class="label">Musical Waveform</div>
+                    <canvas id="outputWaveform"></canvas>
+                    <div class="note-display" id="noteDisplay" style="display: none;">C4</div>
+                </div>
+
+                <div class="visualization-box">
+                    <div class="label">Frequency Spectrum</div>
+                    <canvas id="outputSpectrum"></canvas>
+                    <div class="instrument-indicator" id="instrumentIndicator">Piano</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Ready</span>
+            </div>
+            <div class="status-item">
+                <span>Input Level: <span id="inputLevel">0</span>dB</span>
+            </div>
+            <div class="status-item">
+                <span>Detected Pitch: <span id="detectedPitch">--</span></span>
+            </div>
+            <div class="status-item">
+                <span>Output Frequency: <span id="outputFreq">--</span>Hz</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Audio Context and Nodes
+        let audioContext;
+        let micStream;
+        let micSource;
+        let inputAnalyser;
+        let outputAnalyser;
+        let oscillator;
+        let gainNode;
+        let isRunning = false;
+
+        // Canvas contexts
+        const inputWaveformCanvas = document.getElementById('inputWaveform');
+        const inputSpectrumCanvas = document.getElementById('inputSpectrum');
+        const outputWaveformCanvas = document.getElementById('outputWaveform');
+        const outputSpectrumCanvas = document.getElementById('outputSpectrum');
+
+        const inputWaveformCtx = inputWaveformCanvas.getContext('2d');
+        const inputSpectrumCtx = inputSpectrumCanvas.getContext('2d');
+        const outputWaveformCtx = outputWaveformCanvas.getContext('2d');
+        const outputSpectrumCtx = outputSpectrumCanvas.getContext('2d');
+
+        // UI elements
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const inputLevel = document.getElementById('inputLevel');
+        const detectedPitch = document.getElementById('detectedPitch');
+        const outputFreq = document.getElementById('outputFreq');
+        const noteDisplay = document.getElementById('noteDisplay');
+        const instrumentIndicator = document.getElementById('instrumentIndicator');
+        const timelineProgress = document.getElementById('timelineProgress');
+        const playhead = document.getElementById('playhead');
+
+        // Note names
+        const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+        
+        // Scales for music generation
+        const scales = {
+            major: [0, 2, 4, 5, 7, 9, 11],
+            minor: [0, 2, 3, 5, 7, 8, 10],
+            pentatonic: [0, 2, 4, 7, 9],
+            blues: [0, 3, 5, 6, 7, 10]
+        };
+
+        const currentScale = scales.pentatonic;
+        let currentInstrument = 'sine'; // sine, square, triangle, sawtooth
+        const instruments = {
+            'sine': 'Piano',
+            'square': 'Synth',
+            'triangle': 'Flute',
+            'sawtooth': 'Strings'
+        };
+
+        // Resize canvases
+        function resizeCanvas() {
+            [inputWaveformCanvas, inputSpectrumCanvas, outputWaveformCanvas, outputSpectrumCanvas].forEach(canvas => {
+                canvas.width = canvas.offsetWidth;
+                canvas.height = canvas.offsetHeight;
+            });
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Start button handler
+        startBtn.addEventListener('click', async () => {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // Get microphone access
+                micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                micSource = audioContext.createMediaStreamSource(micStream);
+
+                // Create analysers
+                inputAnalyser = audioContext.createAnalyser();
+                inputAnalyser.fftSize = 2048;
+                inputAnalyser.smoothingTimeConstant = 0.8;
+
+                outputAnalyser = audioContext.createAnalyser();
+                outputAnalyser.fftSize = 2048;
+                outputAnalyser.smoothingTimeConstant = 0.8;
+
+                // Connect input
+                micSource.connect(inputAnalyser);
+
+                // Create gain node for output
+                gainNode = audioContext.createGain();
+                gainNode.gain.value = 0.3;
+                gainNode.connect(outputAnalyser);
+                outputAnalyser.connect(audioContext.destination);
+
+                isRunning = true;
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                statusDot.classList.add('active');
+                statusText.textContent = 'Recording & Generating';
+
+                // Start visualization and music generation
+                visualize();
+                generateMusic();
+                animateTimeline();
+                createParticles();
+
+            } catch (error) {
+                console.error('Error starting audio:', error);
+                alert('Failed to access microphone. Please allow microphone access.');
+            }
+        });
+
+        // Stop button handler
+        stopBtn.addEventListener('click', () => {
+            isRunning = false;
+            
+            if (oscillator) {
+                oscillator.stop();
+                oscillator = null;
+            }
+            
+            if (micStream) {
+                micStream.getTracks().forEach(track => track.stop());
+            }
+            
+            if (audioContext) {
+                audioContext.close();
+            }
+
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            statusDot.classList.remove('active');
+            statusText.textContent = 'Stopped';
+        });
+
+        // Pitch detection using autocorrelation
+        function detectPitch(buffer) {
+            const SIZE = buffer.length;
+            const MAX_SAMPLES = Math.floor(SIZE / 2);
+            let best_offset = -1;
+            let best_correlation = 0;
+            let rms = 0;
+
+            for (let i = 0; i < SIZE; i++) {
+                const val = buffer[i];
+                rms += val * val;
+            }
+            rms = Math.sqrt(rms / SIZE);
+            
+            if (rms < 0.01) return -1; // Too quiet
+
+            let lastCorrelation = 1;
+            for (let offset = 1; offset < MAX_SAMPLES; offset++) {
+                let correlation = 0;
+
+                for (let i = 0; i < MAX_SAMPLES; i++) {
+                    correlation += Math.abs((buffer[i]) - (buffer[i + offset]));
+                }
+                correlation = 1 - (correlation / MAX_SAMPLES);
+                
+                if (correlation > 0.9 && correlation > lastCorrelation) {
+                    const foundGoodCorrelation = correlation > best_correlation;
+                    if (foundGoodCorrelation) {
+                        best_correlation = correlation;
+                        best_offset = offset;
+                    }
+                }
+                lastCorrelation = correlation;
+            }
+            
+            if (best_correlation > 0.01) {
+                return audioContext.sampleRate / best_offset;
+            }
+            return -1;
+        }
+
+        // Convert frequency to nearest note in scale
+        function frequencyToNote(frequency) {
+            if (frequency <= 0) return null;
+            
+            const noteNum = 12 * (Math.log(frequency / 440) / Math.log(2)) + 69;
+            const roundedNote = Math.round(noteNum);
+            
+            // Snap to scale
+            const octave = Math.floor(roundedNote / 12);
+            const noteInOctave = roundedNote % 12;
+            
+            let closestScaleNote = currentScale[0];
+            let minDiff = Math.abs(noteInOctave - closestScaleNote);
+            
+            for (let scaleNote of currentScale) {
+                const diff = Math.abs(noteInOctave - scaleNote);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    closestScaleNote = scaleNote;
+                }
+            }
+            
+            const finalNote = octave * 12 + closestScaleNote;
+            const finalFrequency = 440 * Math.pow(2, (finalNote - 69) / 12);
+            
+            const noteName = noteNames[closestScaleNote] + octave;
+            
+            return {
+                frequency: finalFrequency,
+                name: noteName,
+                midiNote: finalNote
+            };
+        }
+
+        // Generate music based on input
+        function generateMusic() {
+            if (!isRunning) return;
+
+            const bufferLength = inputAnalyser.fftSize;
+            const buffer = new Float32Array(bufferLength);
+            inputAnalyser.getFloatTimeDomainData(buffer);
+
+            const pitch = detectPitch(buffer);
+            
+            if (pitch > 0) {
+                const note = frequencyToNote(pitch);
+                
+                if (note) {
+                    detectedPitch.textContent = note.name;
+                    outputFreq.textContent = note.frequency.toFixed(2);
+                    
+                    // Show note
+                    noteDisplay.textContent = note.name;
+                    noteDisplay.style.display = 'block';
+                    setTimeout(() => {
+                        noteDisplay.style.display = 'none';
+                    }, 300);
+
+                    // Create/update oscillator
+                    if (oscillator) {
+                        oscillator.frequency.setTargetAtTime(note.frequency, audioContext.currentTime, 0.01);
+                    } else {
+                        oscillator = audioContext.createOscillator();
+                        oscillator.type = currentInstrument;
+                        oscillator.frequency.setValueAtTime(note.frequency, audioContext.currentTime);
+                        oscillator.connect(gainNode);
+                        oscillator.start();
+                        
+                        // Change instrument periodically
+                        const instruments_types = ['sine', 'square', 'triangle', 'sawtooth'];
+                        setInterval(() => {
+                            if (isRunning && oscillator) {
+                                currentInstrument = instruments_types[Math.floor(Math.random() * instruments_types.length)];
+                                instrumentIndicator.textContent = instruments[currentInstrument];
+                            }
+                        }, 5000);
+                    }
+                }
+            } else {
+                detectedPitch.textContent = '--';
+                outputFreq.textContent = '--';
+            }
+
+            setTimeout(generateMusic, 100);
+        }
+
+        // Visualization
+        function visualize() {
+            if (!isRunning) return;
+
+            // Input waveform
+            const inputWaveformData = new Uint8Array(inputAnalyser.fftSize);
+            inputAnalyser.getByteTimeDomainData(inputWaveformData);
+            drawWaveform(inputWaveformCtx, inputWaveformData, inputWaveformCanvas, '#4ecdc4');
+
+            // Input spectrum
+            const inputSpectrumData = new Uint8Array(inputAnalyser.frequencyBinCount);
+            inputAnalyser.getByteFrequencyData(inputSpectrumData);
+            drawSpectrum(inputSpectrumCtx, inputSpectrumData, inputSpectrumCanvas, '#ff6b6b');
+
+            // Calculate input level
+            let sum = 0;
+            for (let i = 0; i < inputWaveformData.length; i++) {
+                const normalized = (inputWaveformData[i] - 128) / 128;
+                sum += normalized * normalized;
+            }
+            const rms = Math.sqrt(sum / inputWaveformData.length);
+            const db = 20 * Math.log10(rms);
+            inputLevel.textContent = db.toFixed(1);
+
+            // Output waveform
+            const outputWaveformData = new Uint8Array(outputAnalyser.fftSize);
+            outputAnalyser.getByteTimeDomainData(outputWaveformData);
+            drawWaveform(outputWaveformCtx, outputWaveformData, outputWaveformCanvas, '#f093fb');
+
+            // Output spectrum
+            const outputSpectrumData = new Uint8Array(outputAnalyser.frequencyBinCount);
+            outputAnalyser.getByteFrequencyData(outputSpectrumData);
+            drawSpectrum(outputSpectrumCtx, outputSpectrumData, outputSpectrumCanvas, '#4facfe');
+
+            requestAnimationFrame(visualize);
+        }
+
+        // Draw waveform
+        function drawWaveform(ctx, data, canvas, color) {
+            const width = canvas.width;
+            const height = canvas.height;
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+            ctx.fillRect(0, 0, width, height);
+
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = color;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = color;
+
+            ctx.beginPath();
+
+            const sliceWidth = width / data.length;
+            let x = 0;
+
+            for (let i = 0; i < data.length; i++) {
+                const v = data[i] / 128.0;
+                const y = v * height / 2;
+
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+
+                x += sliceWidth;
+            }
+
+            ctx.lineTo(width, height / 2);
+            ctx.stroke();
+
+            ctx.shadowBlur = 0;
+        }
+
+        // Draw spectrum
+        function drawSpectrum(ctx, data, canvas, color) {
+            const width = canvas.width;
+            const height = canvas.height;
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+            ctx.fillRect(0, 0, width, height);
+
+            const barWidth = (width / data.length) * 2.5;
+            let x = 0;
+
+            for (let i = 0; i < data.length; i++) {
+                const barHeight = (data[i] / 255) * height;
+
+                const gradient = ctx.createLinearGradient(0, height - barHeight, 0, height);
+                gradient.addColorStop(0, color);
+                gradient.addColorStop(1, 'rgba(255, 255, 255, 0.2)');
+
+                ctx.fillStyle = gradient;
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = color;
+                ctx.fillRect(x, height - barHeight, barWidth, barHeight);
+
+                x += barWidth + 1;
+            }
+
+            ctx.shadowBlur = 0;
+        }
+
+        // Animate timeline
+        function animateTimeline() {
+            if (!isRunning) return;
+
+            const progress = (Date.now() % 5000) / 5000 * 100;
+            timelineProgress.style.height = progress + '%';
+            
+            playhead.style.top = progress + '%';
+
+            requestAnimationFrame(animateTimeline);
+        }
+
+        // Create floating particles
+        function createParticles() {
+            if (!isRunning) return;
+
+            const particle = document.createElement('div');
+            particle.className = 'particle';
+            particle.style.left = Math.random() * 100 + '%';
+            particle.style.animationDuration = (2 + Math.random() * 3) + 's';
+            particle.style.animationDelay = Math.random() + 's';
+            
+            document.querySelector('.main-content').appendChild(particle);
+
+            setTimeout(() => {
+                particle.remove();
+            }, 5000);
+
+            setTimeout(() => createParticles(), 500);
+        }
+
+        // Create timeline markers
+        function createTimelineMarkers() {
+            const markers = document.getElementById('timelineMarkers');
+            for (let i = 0; i < 10; i++) {
+                const marker = document.createElement('div');
+                marker.className = 'marker';
+                marker.style.top = (i * 10) + '%';
+                marker.style.animationDelay = (i * 0.2) + 's';
+                markers.appendChild(marker);
+            }
+        }
+
+        createTimelineMarkers();
+    </script>
+</body>
+</html>

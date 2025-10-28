@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chaos of Mind</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #0a0a0a;
+            cursor: none;
+        }
+        #sketch {
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+</head>
+<body>
+    <div id="sketch"></div>
+    <script>
+        let head;
+        let bloodParticles = [];
+        let thoughtParticles = [];
+        let eyeStreams = [];
+        let mouthStreams = [];
+        let earStreams = [];
+        let noiseOffset = 0;
+        let startTime;
+        let lastSecond = -1;
+        let flipAnimations = [];
+        let lastHours = -1;
+        let lastMinutes = -1;
+        let lastSeconds = -1;
+
+        class BloodStream {
+            constructor(x, y, targetX, targetY) {
+                this.startX = x;
+                this.startY = y;
+                this.x = x;
+                this.y = y;
+                this.targetX = targetX;
+                this.targetY = targetY;
+                this.path = [];
+                this.maxPathLength = 30;
+                this.vx = (targetX - x) * 0.1;
+                this.vy = (targetY - y) * 0.1;
+                this.opacity = random(100, 200);
+            }
+
+            update() {
+                this.vx += random(-0.5, 0.5);
+                this.vy += random(0.2, 1.5);
+                this.vx *= 0.95;
+                
+                this.x += this.vx;
+                this.y += this.vy;
+                
+                this.path.push({x: this.x, y: this.y});
+                if (this.path.length > this.maxPathLength) {
+                    this.path.shift();
+                }
+                
+                this.opacity *= 0.98;
+            }
+
+            display() {
+                push();
+                strokeWeight(2.5);
+                stroke(200, 0, 0, this.opacity);
+                noFill();
+                beginShape();
+                for (let i = 0; i < this.path.length; i++) {
+                    vertex(this.path[i].x, this.path[i].y);
+                }
+                endShape();
+                pop();
+            }
+
+            isDead() {
+                return this.opacity < 5 || this.y > height + 50;
+            }
+        }
+
+        class ThoughtParticle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.vx = random(-2, 2);
+                this.vy = random(-2, 2);
+                this.size = random(3, 8);
+                this.opacity = random(100, 255);
+                this.hue = random(0, 60);
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.vx += random(-0.2, 0.2);
+                this.vy += random(-0.2, 0.2);
+                this.vx *= 0.98;
+                this.vy *= 0.98;
+                
+                if (this.x < 0 || this.x > width) this.vx *= -1;
+                if (this.y < 0 || this.y > height) this.vy *= -1;
+                
+                this.opacity *= 0.995;
+            }
+
+            display() {
+                push();
+                fill(this.hue, 100, 50, this.opacity);
+                noStroke();
+                ellipse(this.x, this.y, this.size);
+                pop();
+            }
+
+            isDead() {
+                return this.opacity < 10;
+            }
+        }
+
+        class BloodParticle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.vx = random(-1, 1);
+                this.vy = random(-1, 1);
+                this.size = random(2, 6);
+                this.opacity = random(150, 255);
+                this.life = 255;
+            }
+
+            update() {
+                this.vy += 0.1;
+                this.x += this.vx;
+                this.y += this.vy;
+                this.life--;
+                this.opacity = map(this.life, 255, 0, 255, 0);
+            }
+
+            display() {
+                push();
+                fill(180, 0, 0, this.opacity);
+                noStroke();
+                ellipse(this.x, this.y, this.size);
+                pop();
+            }
+
+            isDead() {
+                return this.life <= 0;
+            }
+        }
+
+        function setup() {
+            let canvas = createCanvas(windowWidth, windowHeight);
+            canvas.parent('sketch');
+            
+            colorMode(HSB, 360, 100, 100, 255);
+            
+            startTime = millis();
+            lastHours = -1;
+            lastMinutes = -1;
+            lastSeconds = -1;
+            
+            head = {
+                x: width / 2,
+                y: height / 2,
+                size: 150
+            };
+        }
+
+        // Flip clock digit rendering
+        function drawFlipDigit(currentDigit, nextDigit, x, y, w, h, flipProgress = 0) {
+            push();
+            translate(x, y);
+            
+            // Card shadow
+            push();
+            translate(2, 2);
+            fill(0, 0, 0, 100);
+            rect(0, 0, w, h, 8);
+            pop();
+            
+            // Bottom half - static (shows current digit)
+            push();
+            fill(30, 10, 25);
+            rect(0, h/2, w, h/2);
+            textAlign(CENTER, CENTER);
+            textSize(h * 0.6);
+            fill(200, 100, 100, 180);
+            push();
+            translate(w/2, h * 3/4);
+            text(currentDigit, 0, 0);
+            pop();
+            pop();
+            
+            // Top half - shows next digit with flip animation
+            let flipHeight = map(flipProgress, 0, 1, h/2, 0);
+            
+            // Current top (folding down)
+            push();
+            fill(20, 10, 20);
+            beginShape();
+            vertex(0, 0);
+            vertex(w, 0);
+            vertex(w, flipHeight);
+            vertex(0, flipHeight);
+            endShape();
+            
+            if (flipHeight > 1) {
+                textAlign(CENTER, CENTER);
+                textSize(h * 0.6);
+                fill(200, 100, 100, 180);
+                push();
+                translate(w/2, flipHeight/2);
+                text(currentDigit, 0, 0);
+                pop();
+            }
+            pop();
+            
+            // Next top (folding up from below)
+            if (flipProgress > 0) {
+                push();
+                fill(40, 10, 30);
+                beginShape();
+                vertex(0, h/2 - flipHeight);
+                vertex(w, h/2 - flipHeight);
+                vertex(w, h/2);
+                vertex(0, h/2);
+                endShape();
+                
+                if (h/2 - flipHeight < h/2 - 1) {
+                    textAlign(CENTER, CENTER);
+                    textSize(h * 0.6);
+                    fill(200, 100, 100, 180);
+                    push();
+                    translate(w/2, h/2 - flipHeight/2);
+                    text(nextDigit, 0, 0);
+                    pop();
+                }
+                pop();
+            }
+            
+            // Card border
+            noFill();
+            stroke(200, 100, 50, 180);
+            strokeWeight(2);
+            rect(0, 0, w, h, 8);
+            
+            // Divider line with glow
+            stroke(0, 0, 60, 200);
+            strokeWeight(2);
+            line(0, h/2, w, h/2);
+            
+            // Accent line at divider
+            if (flipProgress > 0.3 && flipProgress < 0.7) {
+                stroke(200, 100, 80, 100);
+                strokeWeight(3);
+                line(0, h/2, w, h/2);
+            }
+            
+            pop();
+        }
+
+        function draw() {
+            background(0, 0, 10, 20);
+            
+            noiseOffset += 0.01;
+            
+            // Draw face in center with distorted effect
+            push();
+            translate(head.x, head.y);
+            
+            // Apply mouse influence for chaos
+            let mouseInfluence = dist(mouseX, mouseY, head.x, head.y);
+            let chaos = map(mouseInfluence, 0, 300, 0.5, 2);
+            
+            // Distorted head shape
+            beginShape();
+            noFill();
+            stroke(200, 100, 30, 150);
+            strokeWeight(3);
+            
+            for (let angle = 0; angle < TWO_PI; angle += 0.1) {
+                let r = head.size + noise(angle * 2 + noiseOffset) * 20;
+                let x = cos(angle) * r * chaos;
+                let y = sin(angle) * r * chaos;
+                vertex(x, y);
+            }
+            endShape(CLOSE);
+            
+            // Eyes
+            let eyeOffsetX = 35 * chaos;
+            let eyeOffsetY = -20 * chaos;
+            
+            fill(200, 80, 20);
+            noStroke();
+            ellipse(-eyeOffsetX, eyeOffsetY, 20, 20);
+            ellipse(eyeOffsetX, eyeOffsetY, 20, 20);
+            
+            // Create blood streams from eyes
+            if (frameCount % 3 === 0) {
+                eyeStreams.push(new BloodStream(-eyeOffsetX, eyeOffsetY, random(width), random(height)));
+                eyeStreams.push(new BloodStream(eyeOffsetX, eyeOffsetY, random(width), random(height)));
+            }
+            
+            // Mouth
+            noFill();
+            stroke(200, 100, 30, 150);
+            strokeWeight(3);
+            arc(0, 40 * chaos, 40 * chaos, 30 * chaos, 0, PI);
+            
+            // Create blood streams from mouth
+            if (frameCount % 2 === 0) {
+                for (let i = 0; i < 3; i++) {
+                    let mouthX = random(-20 * chaos, 20 * chaos);
+                    let mouthY = 40 * chaos + random(0, 15 * chaos);
+                    mouthStreams.push(new BloodStream(mouthX, mouthY, random(width), random(height)));
+                }
+            }
+            
+            // Ears
+            let earSize = 20 * chaos;
+            ellipse(-head.size * 0.7, 0, earSize, earSize * 1.5);
+            ellipse(head.size * 0.7, 0, earSize, earSize * 1.5);
+            
+            // Create blood streams from ears
+            if (frameCount % 2 === 0) {
+                for (let i = 0; i < 2; i++) {
+                    earStreams.push(new BloodStream(-head.size * 0.7, random(-10, 10), random(width), random(height)));
+                    earStreams.push(new BloodStream(head.size * 0.7, random(-10, 10), random(width), random(height)));
+                }
+            }
+            
+            pop();
+            
+            // Update and display blood streams
+            for (let i = eyeStreams.length - 1; i >= 0; i--) {
+                eyeStreams[i].update();
+                eyeStreams[i].display();
+                if (eyeStreams[i].isDead()) {
+                    eyeStreams.splice(i, 1);
+                }
+            }
+            
+            for (let i = mouthStreams.length - 1; i >= 0; i--) {
+                mouthStreams[i].update();
+                mouthStreams[i].display();
+                if (mouthStreams[i].isDead()) {
+                    mouthStreams.splice(i, 1);
+                }
+            }
+            
+            for (let i = earStreams.length - 1; i >= 0; i--) {
+                earStreams[i].update();
+                earStreams[i].display();
+                if (earStreams[i].isDead()) {
+                    earStreams.splice(i, 1);
+                }
+            }
+            
+            // Create thought particles
+            if (frameCount % 10 === 0) {
+                for (let i = 0; i < 5; i++) {
+                    thoughtParticles.push(new ThoughtParticle(head.x + random(-head.size, head.size), head.y + random(-head.size, head.size)));
+                }
+            }
+            
+            // Update and display thought particles
+            for (let i = thoughtParticles.length - 1; i >= 0; i--) {
+                thoughtParticles[i].update();
+                thoughtParticles[i].display();
+                if (thoughtParticles[i].isDead()) {
+                    thoughtParticles.splice(i, 1);
+                }
+            }
+            
+            // Create blood particles from random points
+            if (frameCount % 5 === 0) {
+                for (let i = 0; i < 8; i++) {
+                    let angle = random(TWO_PI);
+                    let offsetX = cos(angle) * random(0, head.size);
+                    let offsetY = sin(angle) * random(0, head.size);
+                    bloodParticles.push(new BloodParticle(head.x + offsetX, head.y + offsetY));
+                }
+            }
+            
+            // Update and display blood particles
+            for (let i = bloodParticles.length - 1; i >= 0; i--) {
+                bloodParticles[i].update();
+                bloodParticles[i].display();
+                if (bloodParticles[i].isDead()) {
+                    bloodParticles.splice(i, 1);
+                }
+            }
+            
+            // Custom cursor
+            push();
+            noStroke();
+            fill(200, 100, 100, 150);
+            ellipse(mouseX, mouseY, 15);
+            pop();
+            
+            // Time wasted timer - top right corner
+            push();
+            let timerX = width - 550;
+            let timerY = 40;
+            let totalSeconds = floor((millis() - startTime) / 1000);
+            
+            // Save current values as previous before calculating new ones
+            let prevHours = lastHours;
+            let prevMinutes = lastMinutes;
+            let prevSeconds = lastSeconds;
+            
+            // Calculate hours, minutes, seconds
+            let hours = floor(totalSeconds / 3600) % 100;
+            let minutes = floor(totalSeconds / 60) % 60;
+            let seconds = totalSeconds % 60;
+            
+            // Label
+            textAlign(LEFT, CENTER);
+            textSize(16);
+            fill(200, 100, 50, 200);
+            text("time wasted:", timerX, timerY);
+            
+            // Flip clock effect
+            let digitWidth = 35;
+            let digitHeight = 45;
+            let spacing = 42;
+            let colonWidth = 20;
+            
+            // Calculate flip progress (0 to 1 over ~0.3 seconds)
+            let flipProgress = min(1, (millis() - startTime - totalSeconds * 1000) / 300);
+            
+            // Helper function to draw a 2-digit flip clock
+            function drawTwoDigits(value, lastValue, x, y, w, h, spacing) {
+                let tens = floor(value / 10);
+                let ones = value % 10;
+                let lastTens = (lastValue === -1) ? tens : floor(lastValue / 10);
+                let lastOnes = (lastValue === -1) ? ones : lastValue % 10;
+                
+                // Draw tens digit
+                if (lastValue !== -1 && tens !== lastTens) {
+                    drawFlipDigit(lastTens, tens, x, y, w, h, flipProgress);
+                } else {
+                    drawFlipDigit(tens, tens, x, y, w, h, 0);
+                }
+                
+                // Draw ones digit
+                if (lastValue !== -1 && ones !== lastOnes) {
+                    drawFlipDigit(lastOnes, ones, x + spacing, y, w, h, flipProgress);
+                } else {
+                    drawFlipDigit(ones, ones, x + spacing, y, w, h, 0);
+                }
+            }
+            
+            let currentX = timerX;
+            
+            // Draw hours (xx)
+            drawTwoDigits(hours, prevHours, currentX, timerY + 30, digitWidth, digitHeight, spacing);
+            currentX += spacing * 2 + 10;
+            
+            // Draw colon
+            textAlign(CENTER, CENTER);
+            textSize(24);
+            fill(200, 100, 70, 180);
+            text(":", currentX, timerY + 50);
+            currentX += colonWidth;
+            
+            // Draw minutes (xx)
+            drawTwoDigits(minutes, prevMinutes, currentX, timerY + 30, digitWidth, digitHeight, spacing);
+            currentX += spacing * 2 + 10;
+            
+            // Draw colon
+            textSize(24);
+            text(":", currentX, timerY + 50);
+            currentX += colonWidth;
+            
+            // Draw seconds (xx)
+            drawTwoDigits(seconds, prevSeconds, currentX, timerY + 30, digitWidth, digitHeight, spacing);
+            
+            // Update tracking - at the end of each second
+            if (totalSeconds !== lastSecond) {
+                lastHours = hours;
+                lastMinutes = minutes;
+                lastSeconds = seconds;
+                lastSecond = totalSeconds;
+            }
+            
+            pop();
+        }
+
+        function windowResized() {
+            resizeCanvas(windowWidth, windowHeight);
+            head.x = width / 2;
+            head.y = height / 2;
+        }
+
+        function mousePressed() {
+            // Chaos burst on click
+            for (let i = 0; i < 50; i++) {
+                bloodParticles.push(new BloodParticle(head.x, head.y));
+            }
+        }
+    </script>
+</body>
+</html>
+

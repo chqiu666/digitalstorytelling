@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Exhaustion</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: linear-gradient(to bottom, #000014, #0a0015);
+            font-family: 'Courier New', monospace;
+            cursor: none;
+        }
+        #sketch {
+            width: 100vw;
+            height: 100vh;
+        }
+        .instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 12px;
+            text-align: center;
+            pointer-events: none;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="sketch"></div>
+    <div class="instructions">
+        Click to scroll • Move mouse to interact • Space to reset
+    </div>
+    <script>
+        // Game state
+        let exhaustion = 0;
+        let isolation = 0;
+        let confusion = 0;
+        let irritation = 0;
+        let notificationCount = 0;
+        
+        // Visual elements
+        let notifications = [];
+        let dataStreams = [];
+        let redEyeParticles = [];
+        let fogLayers = [];
+        let blurLevel = 0;
+        let screenFlicker = 0;
+        let redShockEffect = 0; // Full screen red shock effect
+        let shockTriggered = false;
+        let burnoutsCount = 0; // Track how many times burnout was reached
+        let extremeRedMode = false; // Second burnout = pure red screen
+        let hasRecovered = false; // Track if values dropped after first burnout
+        let extremeFadeOut = 0; // Fade out counter for extreme mode
+        let currentFadeAlpha = 255; // Current alpha for extreme mode fade out
+        
+        // Character position
+        let face = {
+            x: 0,
+            y: 0,
+            eyeRedness: 0,
+            tiredness: 0,
+            headMovement: 0
+        };
+
+        class Notification {
+            constructor() {
+                this.x = random(width);
+                this.y = random(-height, 0);
+                this.speed = random(1, 3);
+                this.text = this.randomText();
+                this.brightness = random(150, 255);
+                this.size = random(14, 18);
+                this.fadeOut = false;
+            }
+
+            randomText() {
+                const texts = [
+                    "New message",
+                    "Like on your post",
+                    "Trending now",
+                    "AI detected: content",
+                    "1,234 notifications",
+                    "Your data: analyzed",
+                    "New update available",
+                    "Someone mentioned you",
+                    "Suggested: watch this",
+                    "Breaking: algorithm changed",
+                    "Follow this person",
+                    "You might like...",
+                    "Targeted ad for you",
+                    "Content moderation alert",
+                    "Optimize your profile"
+                ];
+                return random(texts);
+            }
+
+            update() {
+                this.y += this.speed;
+                this.brightness = max(0, this.brightness - 0.5);
+                if (this.y > height || this.brightness < 10) {
+                    this.fadeOut = true;
+                }
+            }
+
+            display() {
+                push();
+                fill(255, 100, 100, this.brightness);
+                textSize(this.size);
+                text(this.text, this.x, this.y);
+                pop();
+            }
+        }
+
+        class DataStream {
+            constructor(x) {
+                this.x = x;
+                this.chars = [];
+                this.speed = random(2, 5);
+                this.generateChars();
+            }
+
+            generateChars() {
+                const symbols = "01█▓▒░◇◆▲▼○●•";
+                this.chars = [];
+                for (let i = 0; i < 50; i++) {
+                    this.chars.push({
+                        char: random(symbols),
+                        y: random(-height * 2, 0),
+                        brightness: random(50, 150)
+                    });
+                }
+            }
+
+            update() {
+                for (let char of this.chars) {
+                    char.y += this.speed;
+                    if (char.y > height) {
+                        char.y = random(-height, 0);
+                        char.brightness = random(50, 150);
+                    }
+                }
+            }
+
+            display() {
+                push();
+                textSize(14);
+                textAlign(LEFT, TOP);
+                for (let char of this.chars) {
+                    fill(0, 150, 100, char.brightness);
+                    text(char.char, this.x, char.y);
+                }
+                pop();
+            }
+        }
+
+        class RedEyeParticle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.size = random(15, 40);
+                this.life = 255;
+                this.vx = random(-2, 2);
+                this.vy = random(-2, 2);
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.life -= 3;
+                this.vx *= 0.98;
+                this.vy *= 0.98;
+            }
+
+            display() {
+                push();
+                fill(0, 100, 100, this.life);
+                noStroke();
+                ellipse(this.x, this.y, this.size);
+                pop();
+            }
+
+            isDead() {
+                return this.life <= 0;
+            }
+        }
+
+        class FogLayer {
+            constructor(z) {
+                this.z = z;
+                this.particles = [];
+                for (let i = 0; i < 30; i++) {
+                    this.particles.push({
+                        x: random(width),
+                        y: random(height),
+                        size: random(100, 300)
+                    });
+                }
+            }
+
+            display() {
+                push();
+                noStroke();
+                fill(260, 30, 20, 30);
+                for (let p of this.particles) {
+                    ellipse(p.x, p.y, p.size);
+                }
+                pop();
+            }
+        }
+
+        function setup() {
+            let canvas = createCanvas(windowWidth, windowHeight);
+            canvas.parent('sketch');
+            colorMode(HSB, 360, 100, 100);
+            
+            face.x = width / 2;
+            face.y = height / 2;
+            
+            // Create data streams
+            for (let i = 0; i < 20; i++) {
+                dataStreams.push(new DataStream(random(width)));
+            }
+            
+            // Create fog layers for emptiness
+            for (let i = 0; i < 3; i++) {
+                fogLayers.push(new FogLayer(i));
+            }
+        }
+
+        function draw() {
+            background(0, 0, 5);
+            
+            // Exhaustion increases automatically (only when not in burnout states)
+            if (!shockTriggered || (shockTriggered && burnoutsCount === 1 && hasRecovered && !extremeRedMode)) {
+                exhaustion = min(100, exhaustion + 0.01);
+            }
+            
+            // After first burnout, values slowly decrease automatically (before recovery)
+            if (shockTriggered && burnoutsCount === 1 && !hasRecovered) {
+                exhaustion = max(0, exhaustion - 0.08);
+                irritation = max(0, irritation - 0.4);
+                notificationCount = max(0, notificationCount - 0.8);
+            }
+            
+            // Check if any value reached 100% and trigger red shock
+            if ((exhaustion >= 100 || irritation >= 100 || notificationCount >= 50) && !shockTriggered) {
+                redShockEffect = 255;
+                shockTriggered = true;
+                burnoutsCount = 1;
+                hasRecovered = false;
+            }
+            
+            // Check if values have recovered (all below 30%)
+            if (shockTriggered && burnoutsCount === 1 && 
+                exhaustion < 30 && irritation < 30 && notificationCount < 15) {
+                hasRecovered = true;
+            }
+            
+            // Check for second burnout (after recovery, values reach 100% again)
+            if (shockTriggered && burnoutsCount === 1 && hasRecovered) {
+                if (exhaustion >= 100 || irritation >= 100 || notificationCount >= 50) {
+                    extremeRedMode = true;
+                    burnoutsCount = 2;
+                }
+            }
+            
+            if (extremeRedMode) {
+                extremeFadeOut++;
+                
+                // After 5 seconds (300 frames at 60fps), start fading out
+                if (extremeFadeOut > 300) {
+                    currentFadeAlpha = map(extremeFadeOut, 300, 600, 255, 0);
+                    currentFadeAlpha = constrain(currentFadeAlpha, 0, 255);
+                }
+                
+                // If fully faded out, reset to initial state
+                if (extremeFadeOut > 600) {
+                    // Reset everything
+                    extremeRedMode = false;
+                    shockTriggered = false;
+                    burnoutsCount = 0;
+                    hasRecovered = false;
+                    extremeFadeOut = 0;
+                    currentFadeAlpha = 255;
+                    exhaustion = 0;
+                    irritation = 0;
+                    notificationCount = 0;
+                    notifications = [];
+                    redEyeParticles = [];
+                    // Skip remaining rendering and return
+                    drawCursor();
+                    return;
+                }
+                
+                // During full red phase, return early to only show red
+                if (extremeFadeOut < 300) {
+                    // Pure red screen
+                    fill(0, 100, 100);
+                    rect(0, 0, width, height);
+                    
+                    // Intense pulsing
+                    let extremePulse = sin(frameCount * 0.8) * 30 + 70;
+                    fill(0, 100, extremePulse);
+                    rect(0, 0, width, height);
+                    
+                    // Shocking text
+                    push();
+                    fill(0, 0, 0);
+                    textSize(100);
+                    textAlign(CENTER, CENTER);
+                    textWeight(BOLD);
+                    text("BREAKDOWN", width/2, height/2);
+                    pop();
+                    
+                    push();
+                    fill(0, 0, 0, 180);
+                    textSize(24);
+                    textAlign(CENTER, CENTER);
+                    text("SYSTEM OVERLOAD", width/2, height/2 + 80);
+                    pop();
+                    
+                    push();
+                    fill(0, 100, 100);
+                    textSize(18);
+                    textAlign(CENTER, CENTER);
+                    text("RECOVERING...", width/2, height/2 + 120);
+                    pop();
+                    
+                    drawCursor();
+                    return;
+                }
+            }
+            
+            // First red shock effect (full screen red) - persists while triggered
+            if (shockTriggered && !extremeRedMode) {
+                // Keep effect alive while still at 100%
+                if (exhaustion >= 100 || irritation >= 100 || notificationCount >= 50) {
+                    redShockEffect = 255;
+                }
+                
+                // Pulsing red effect
+                let pulse = sin(frameCount * 0.4) * 60 + 150;
+                fill(0, 100, 100, pulse);
+                rect(0, 0, width, height);
+                
+                // Another layer for more intense effect
+                let pulse2 = cos(frameCount * 0.25) * 40 + 100;
+                fill(0, 100, 90, pulse2);
+                rect(0, 0, width, height);
+                
+                // Add text overlay
+                push();
+                fill(0, 0, 0, 200);
+                textSize(80);
+                textAlign(CENTER, CENTER);
+                text("BURNOUT", width/2, height/2);
+                pop();
+                
+                // Shock warning text
+                push();
+                fill(0, 100, 100);
+                textSize(20);
+                textAlign(CENTER, CENTER);
+                text("PRESS SPACE TO CONTINUE", width/2, height/2 + 60);
+                pop();
+            }
+            
+            // Screen flicker effect (only if no shock effect)
+            if (screenFlicker > 0 && redShockEffect === 0) {
+                fill(0, 0, 100, screenFlicker);
+                rect(0, 0, width, height);
+                screenFlicker -= 5;
+            }
+            
+            // Update and display fog layers (emptiness, confusion)
+            let fogOpacity = map(exhaustion, 0, 100, 0, 100);
+            push();
+            for (let fog of fogLayers) {
+                fog.display();
+            }
+            pop();
+            
+            // Notification spam (irritation)
+            // Allow notifications to grow after first burnout recovery
+            let allowNotifications = !shockTriggered || (shockTriggered && burnoutsCount === 1 && hasRecovered && !extremeRedMode);
+            if (frameCount % 60 === 0 && notificationCount < 50 && allowNotifications) {
+                for (let i = 0; i < 3; i++) {
+                    notifications.push(new Notification());
+                }
+                notificationCount++;
+            }
+            
+            // Update notifications
+            for (let i = notifications.length - 1; i >= 0; i--) {
+                notifications[i].update();
+                if (notifications[i].fadeOut) {
+                    notifications.splice(i, 1);
+                }
+            }
+            
+            // Display notifications
+            push();
+            textAlign(LEFT, TOP);
+            for (let notif of notifications) {
+                notif.display();
+            }
+            pop();
+            
+            // Update and display data streams (overload, confusion)
+            let streamIntensity = map(exhaustion, 0, 100, 0.5, 1.5);
+            for (let stream of dataStreams) {
+                stream.speed = stream.speed * streamIntensity;
+                stream.update();
+                stream.display();
+            }
+            
+            // Mouse interaction affects exhaustion
+            let mouseInfluence = dist(mouseX, mouseY, face.x, face.y);
+            face.headMovement = sin(frameCount * 0.02) * map(exhaustion, 0, 100, 2, 15);
+            face.tiredness = min(100, exhaustion * 0.5);
+            face.eyeRedness = min(100, irritation * 2 + exhaustion);
+            
+            // Draw tired face
+            drawFace();
+            
+            // Red eye particles (depression, irritation)
+            if (frameCount % (max(5, 30 - irritation / 5)) === 0) {
+                let eye1X = face.x - 40;
+                let eye2X = face.x + 40;
+                let eyeY = face.y - 10 + face.headMovement * 0.5;
+                redEyeParticles.push(new RedEyeParticle(eye1X, eyeY));
+                redEyeParticles.push(new RedEyeParticle(eye2X, eyeY));
+            }
+            
+            for (let i = redEyeParticles.length - 1; i >= 0; i--) {
+                redEyeParticles[i].update();
+                if (redEyeParticles[i].isDead()) {
+                    redEyeParticles.splice(i, 1);
+                }
+            }
+            
+            for (let particle of redEyeParticles) {
+                particle.display();
+            }
+            
+            // Draw frame counter and exhaustion level (isolation)
+            push();
+            fill(0, 0, 50);
+            textSize(16);
+            textAlign(RIGHT, TOP);
+            text(`Exhaustion: ${int(exhaustion)}%`, width - 20, 20);
+            text(`Notifications: ${notificationCount}`, width - 20, 45);
+            text(`Irritation: ${int(irritation)}%`, width - 20, 70);
+            if (burnoutsCount > 0) {
+                text(`Burnouts: ${burnoutsCount}`, width - 20, 95);
+            }
+            pop();
+            
+            // Custom cursor
+            drawCursor();
+            
+            // Draw extreme red overlay during fade out phase
+            if (extremeRedMode && extremeFadeOut >= 300) {
+                // Fading red overlay
+                fill(0, 100, 100, currentFadeAlpha);
+                rect(0, 0, width, height);
+                
+                // Fading text
+                if (currentFadeAlpha > 50) {
+                    push();
+                    fill(0, 0, 0, currentFadeAlpha);
+                    textSize(100);
+                    textAlign(CENTER, CENTER);
+                    textWeight(BOLD);
+                    text("BREAKDOWN", width/2, height/2);
+                    pop();
+                    
+                    push();
+                    fill(0, 0, 0, map(currentFadeAlpha, 0, 255, 0, 180));
+                    textSize(24);
+                    textAlign(CENTER, CENTER);
+                    text("SYSTEM OVERLOAD", width/2, height/2 + 80);
+                    pop();
+                    
+                    push();
+                    fill(0, 100, 100, currentFadeAlpha);
+                    textSize(18);
+                    textAlign(CENTER, CENTER);
+                    text("RECOVERING...", width/2, height/2 + 120);
+                    pop();
+                }
+            }
+        }
+
+        function drawFace() {
+            push();
+            translate(face.x, face.y + face.headMovement);
+            
+            // Head shadow (tiredness, depression)
+            push();
+            noStroke();
+            fill(0, 0, 20, 100);
+            ellipse(0, 0, 180, 180);
+            pop();
+            
+            // Head
+            push();
+            let tirednessColor = 210 - face.tiredness;
+            fill(tirednessColor, 30, 15 + face.tiredness / 2);
+            noStroke();
+            ellipse(0, 0, 150, 150);
+            pop();
+            
+            // Red eyes (depression, irritation)
+            let eyeSize = map(face.tiredness, 0, 100, 8, 25);
+            push();
+            noStroke();
+            // Eye whites
+            fill(0, 0, 90);
+            ellipse(-40, -10, 25, 15);
+            ellipse(40, -10, 25, 15);
+            
+            // Red tired eyes
+            fill(0, 100, 100, min(255, face.eyeRedness * 2.5));
+            ellipse(-40, -10, eyeSize, eyeSize * 0.7);
+            ellipse(40, -10, eyeSize, eyeSize * 0.7);
+            
+            // Pupils (shrinking with exhaustion)
+            let pupilSize = map(face.tiredness, 0, 100, 8, 3);
+            fill(0, 0, 10);
+            ellipse(-40 + sin(frameCount * 0.1) * 2, -10, pupilSize);
+            ellipse(40 + cos(frameCount * 0.1) * 2, -10, pupilSize);
+            pop();
+            
+            // Tired, sagging mouth
+            push();
+            noFill();
+            stroke(0, 0, 30);
+            strokeWeight(3);
+            let mouthWidth = map(face.tiredness, 0, 100, 40, 60);
+            let mouthHeight = map(face.tiredness, 0, 100, 20, 35);
+            arc(0, 20, mouthWidth, mouthHeight, 0, PI);
+            pop();
+            
+            // Dark circles under eyes
+            push();
+            noStroke();
+            fill(0, 30, 30, 150);
+            ellipse(-40, 5, 30, 8);
+            ellipse(40, 5, 30, 8);
+            pop();
+            
+            pop();
+        }
+
+        function drawCursor() {
+            push();
+            fill(0, 100, 100, 150);
+            noStroke();
+            ellipse(mouseX, mouseY, 8);
+            push();
+            fill(0, 100, 100, 80);
+            ellipse(mouseX, mouseY, 20);
+            pop();
+            pop();
+        }
+
+        function mouseClicked() {
+            irritation = min(100, irritation + 5);
+            exhaustion = min(100, exhaustion + 2);
+            notificationCount = min(50, notificationCount + 2);
+            
+            // Add screen flicker
+            screenFlicker = 20;
+            
+            // Burst effect
+            for (let i = 0; i < 30; i++) {
+                redEyeParticles.push(new RedEyeParticle(mouseX, mouseY));
+            }
+        }
+
+        function keyPressed() {
+            if (key === ' ') {
+                // Reset
+                exhaustion = 0;
+                irritation = 0;
+                notificationCount = 0;
+                notifications = [];
+                redEyeParticles = [];
+                redShockEffect = 0;
+                shockTriggered = false;
+                burnoutsCount = 0;
+                extremeRedMode = false;
+                hasRecovered = false;
+                extremeFadeOut = 0;
+                currentFadeAlpha = 255;
+            }
+        }
+
+        function windowResized() {
+            resizeCanvas(windowWidth, windowHeight);
+            face.x = width / 2;
+            face.y = height / 2;
+        }
+    </script>
+</body>
+</html>
+
